@@ -4,6 +4,8 @@ module Zip
     DEFLATED = 8
     # Language encoding flag (EFS) bit
     EFS = 0b100000000000
+    # CRC, compressed size, uncompressed size values stored in data descriptor
+    NONSEEKABLE_STREAM = 0b1000
 
     attr_accessor :comment, :compressed_size, :crc, :extra, :compression_method,
                   :name, :size, :local_header_offset, :zipfile, :fstype, :external_file_attributes,
@@ -122,6 +124,10 @@ module Zip
 
     def comment_size
       @comment ? @comment.bytesize : 0
+    end
+
+    def use_data_descriptor?
+      (@gp_flags & NONSEEKABLE_STREAM) != 0
     end
 
     def calculate_local_header_size #:nodoc:all
@@ -250,15 +256,24 @@ module Zip
 
     def pack_local_entry
       zip64 = @extra['Zip64']
+      crc, compressed_size, original_size = if use_data_descriptor?
+        [0, 0, 0]
+      else
+        [
+          @crc,
+          (zip64 && zip64.compressed_size) ? 0xFFFFFFFF : @compressed_size,
+          (zip64 && zip64.original_size) ? 0xFFFFFFFF : @size
+        ]
+      end
       [::Zip::LOCAL_ENTRY_SIGNATURE,
        @version_needed_to_extract, # version needed to extract
        @gp_flags, # @gp_flags                  ,
        @compression_method,
        @time.to_binary_dos_time, # @last_mod_time              ,
        @time.to_binary_dos_date, # @last_mod_date              ,
-       @crc,
-       (zip64 && zip64.compressed_size) ? 0xFFFFFFFF : @compressed_size,
-       (zip64 && zip64.original_size) ? 0xFFFFFFFF : @size,
+       crc,
+       compressed_size,
+       original_size,
        name_size,
        @extra ? @extra.local_size : 0].pack('VvvvvvVVVvv')
     end

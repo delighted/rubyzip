@@ -20,8 +20,8 @@ module Zip
       data
     end
 
-    def data_descriptor(_crc32, _compressed_size, _uncomprssed_size)
-      ''
+    def data_descriptor(crc32, compressed_size, uncompressed_size)
+      [crc32, compressed_size, uncompressed_size].pack('VVV')
     end
 
     def reset!

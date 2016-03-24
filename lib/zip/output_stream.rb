@@ -24,13 +24,13 @@ module Zip
 
     # Opens the indicated zip file. If a file with that name already
     # exists it will be overwritten.
-    def initialize(file_name, stream = false, encrypter = nil)
+    def initialize(file_name, stream=false, encrypter=nil, seekable=true)
       super()
       @file_name = file_name
       @output_stream = if stream
                          iostream = @file_name.dup
                          iostream.reopen(@file_name)
-                         iostream.rewind
+                         iostream.rewind if seekable
                          iostream
                        else
                          ::File.new(@file_name, 'wb')
@@ -41,6 +41,7 @@ module Zip
       @closed = false
       @current_entry = nil
       @comment = nil
+      @seekable = seekable
     end
 
     # Same as #initialize but if a block is passed the opened
@@ -92,6 +93,7 @@ module Zip
       else
         new_entry = Entry.new(@file_name, entry_name.to_s)
       end
+      new_entry.gp_flags |= Zip::Entry::NONSEEKABLE_STREAM unless @seekable
       new_entry.comment = comment unless comment.nil?
       unless extra.nil?
         new_entry.extra = extra.is_a?(ExtraField) ? extra : ExtraField.new(extra.to_s)
@@ -127,7 +129,9 @@ module Zip
       @current_entry.compressed_size = @output_stream.tell - @current_entry.local_header_offset - @current_entry.calculate_local_header_size
       @current_entry.size = @compressor.size
       @current_entry.crc = @compressor.crc
-      @output_stream << @encrypter.data_descriptor(@current_entry.crc, @current_entry.compressed_size, @current_entry.size)
+      if @current_entry.use_data_descriptor?
+        @output_stream << @encrypter.data_descriptor(@current_entry.crc, @current_entry.compressed_size, @current_entry.size)
+      end
       @current_entry.gp_flags |= @encrypter.gp_flags
       @current_entry = nil
       @compressor = ::Zip::NullCompressor.instance
@@ -155,6 +159,7 @@ module Zip
     end
 
     def update_local_headers
+      return unless @seekable
       pos = @output_stream.pos
       @entry_set.each do |entry|
         @output_stream.pos = entry.local_header_offset
