@@ -1,3 +1,28 @@
+1.2.1
+=====
+
+* Add accessor to @internal_file_attributes #304
+* Extended globbing #303
+* README updates #283, #289
+* Cleanup after tests #298, #306
+* Fix permissions on new zip files #294, #300
+* Fix examples #297
+* Support cp932 encoding #308
+* Fix Directory traversal vulnerability #315
+* Allow open_buffer to work without a given block #314
+
+1.2.0
+=====
+
+* Don't enable JRuby objectspace #252
+* Fixes an exception thrown when decoding some weird .zip files #248
+* Use duck typing with IO methods #244
+* Added error for empty (zero bit) zip file #242
+* Accept StringIO in Zip.open_buffer #238
+* Do something more expected with new file permissions #237
+* Case insensitivity option for #find_entry #222
+* Fixes in documentation and examples
+
 1.1.7
 =====
 

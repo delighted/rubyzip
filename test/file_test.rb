@@ -2,6 +2,7 @@ require 'test_helper'
 
 class ZipFileTest < MiniTest::Test
   include CommonZipFileFixture
+  include ZipEntryData
 
   OK_DELETE_FILE = 'test/data/generated/okToDelete.txt'
   OK_DELETE_MOVED_FILE = 'test/data/generated/okToDeleteMoved.txt'
@@ -40,6 +41,20 @@ class ZipFileTest < MiniTest::Test
     assert_equal(2, zfRead.entries.length)
   end
 
+  def test_create_from_scratch_with_old_create_parameter
+    comment = 'a short comment'
+
+    zf = ::Zip::File.new(EMPTY_FILENAME, 1)
+    zf.get_output_stream('myFile') { |os| os.write 'myFile contains just this' }
+    zf.mkdir('dir1')
+    zf.comment = comment
+    zf.close
+
+    zfRead = ::Zip::File.new(EMPTY_FILENAME)
+    assert_equal(comment, zfRead.comment)
+    assert_equal(2, zfRead.entries.length)
+  end
+
   def test_get_output_stream
     entryCount = nil
     ::Zip::File.open(TEST_ZIP.zip_name) do |zf|
@@ -56,7 +71,7 @@ class ZipFileTest < MiniTest::Test
       assert_equal(entryCount + 1, zf.size)
       assert_equal('Putting stuff in data/generated/empty.txt', zf.read('test/data/generated/empty.txt'))
 
-      custom_entry_args = [ZipEntryTest::TEST_COMMENT, ZipEntryTest::TEST_EXTRA, ZipEntryTest::TEST_COMPRESSED_SIZE, ZipEntryTest::TEST_CRC, ::Zip::Entry::STORED, ZipEntryTest::TEST_SIZE, ZipEntryTest::TEST_TIME]
+      custom_entry_args = [TEST_COMMENT, TEST_EXTRA, TEST_COMPRESSED_SIZE, TEST_CRC, ::Zip::Entry::STORED, TEST_SIZE, TEST_TIME]
       zf.get_output_stream('entry_with_custom_args.txt', nil, *custom_entry_args) do |os|
         os.write 'Some data'
       end
@@ -87,6 +102,12 @@ class ZipFileTest < MiniTest::Test
     ::Zip::File.open_buffer string_io do |zf|
       assert zf.entries.map { |e| e.name }.include?('zippedruby1.rb')
     end
+  end
+
+  def test_open_buffer_without_block
+    string_io = StringIO.new File.read('test/data/rubycode.zip')
+    zf = ::Zip::File.open_buffer string_io
+    assert zf.entries.map { |e| e.name }.include?('zippedruby1.rb')
   end
 
   def test_cleans_up_tempfiles_after_close
@@ -528,9 +549,8 @@ class ZipFileTest < MiniTest::Test
   end
 
   def test_empty_zip
-    puts `touch empty.zip`
     assert_raises(::Zip::Error) do
-      ::Zip::File.open('empty.zip')
+      ::Zip::File.open(TestFiles::NULL_FILE)
     end
   end
 

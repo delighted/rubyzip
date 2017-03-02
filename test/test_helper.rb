@@ -134,7 +134,7 @@ module AssertEntry
     testZipFile.entry_names.each do |entryName|
       assert_next_entry(entryName, zis)
     end
-    assert_equal(nil, zis.get_next_entry)
+    assert_nil(zis.get_next_entry)
   end
 
   def assert_test_zip_contents(testZipFile)
@@ -218,4 +218,17 @@ module ExtraAssertions
   ensure
     anObject.instance_eval "undef #{method}; alias #{method} #{method}_org"
   end
+end
+
+module ZipEntryData
+  TEST_ZIPFILE = 'someZipFile.zip'
+  TEST_COMMENT = 'a comment'
+  TEST_COMPRESSED_SIZE = 1234
+  TEST_CRC = 325_324
+  TEST_EXTRA = 'Some data here'
+  TEST_COMPRESSIONMETHOD = ::Zip::Entry::DEFLATED
+  TEST_NAME = 'entry name'
+  TEST_SIZE = 8432
+  TEST_ISDIRECTORY = false
+  TEST_TIME = Time.now
 end
