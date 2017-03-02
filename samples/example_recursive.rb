@@ -6,7 +6,7 @@ require 'zip'
 # included in the archive, rather just its contents.
 #
 # Usage:
-#   directoryToZip = "/tmp/input"
+#   directory_to_zip = "/tmp/input"
 #   output_file = "/tmp/out.zip"
 #   zf = ZipFileGenerator.new(directory_to_zip, output_file)
 #   zf.write()
@@ -50,8 +50,6 @@ class ZipFileGenerator
   end
 
   def put_into_archive(disk_file_path, io, zip_file_path)
-    io.get_output_stream(zip_file_path) do |f|
-      f.write(File.open(disk_file_path, 'rb').read)
-    end
+    io.add(zip_file_path, disk_file_path)
   end
 end

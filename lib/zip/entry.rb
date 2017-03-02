@@ -7,6 +7,7 @@ module Zip
 
     attr_accessor :comment, :compressed_size, :crc, :extra, :compression_method,
                   :name, :size, :local_header_offset, :zipfile, :fstype, :external_file_attributes,
+                  :internal_file_attributes,
                   :gp_flags, :header_signature, :follow_symlinks,
                   :restore_times, :restore_permissions, :restore_ownership,
                   :unix_uid, :unix_gid, :unix_perms,
@@ -148,6 +149,11 @@ module Zip
     # Extracts entry to file dest_path (defaults to @name).
     def extract(dest_path = @name, &block)
       block ||= proc { ::Zip.on_exists_proc }
+
+      if @name.squeeze('/') =~ /\.{2}(?:\/|\z)/
+        puts "WARNING: skipped \"../\" path component(s) in #{@name}"
+        return self
+      end
 
       if directory? || file? || symlink?
         __send__("create_#{@ftype}", dest_path, &block)
@@ -357,7 +363,7 @@ module Zip
       unpack_c_dir_entry(static_sized_fields_buf)
       check_c_dir_entry_signature
       set_time(@last_mod_date, @last_mod_time)
-      @name = io.read(@name_length).tr('\\', '/')
+      @name = io.read(@name_length)
       read_c_dir_extra_field(io)
       @comment = io.read(@comment_length)
       check_c_dir_entry_comment_size
