@@ -161,6 +161,12 @@ module Zip
         return self
       end
 
+      # XXX Temporary mitigation for https://github.com/rubyzip/rubyzip/issues/369
+      raise "symlinks not supported" if symlink?
+      allowed_base_dir = Pathname.new(Dir.tmpdir).expand_path.to_s
+      is_safe_dest_path = Pathname.new(dest_path).expand_path.to_s.start_with?(allowed_base_dir)
+      raise "unsafe dest_path: #{dest_path.inspect}" unless is_safe_dest_path 
+
       if directory? || file? || symlink?
         __send__("create_#{@ftype}", dest_path, &block)
       else
