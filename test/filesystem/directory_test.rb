@@ -3,6 +3,7 @@ require 'zip/filesystem'
 
 class ZipFsDirectoryTest < MiniTest::Test
   TEST_ZIP = 'test/data/generated/zipWithDirs_copy.zip'
+  GLOB_TEST_ZIP = 'test/data/globTest.zip'
 
   def setup
     FileUtils.cp('test/data/zipWithDirs.zip', TEST_ZIP)
@@ -51,10 +52,10 @@ class ZipFsDirectoryTest < MiniTest::Test
         zf.dir.chdir 'file1'
       end
 
-      assert_equal(%w(dir1 dir2 file1).sort, zf.dir.entries('.').sort)
+      assert_equal(%w[dir1 dir2 file1].sort, zf.dir.entries('.').sort)
       zf.dir.chdir 'dir1'
       assert_equal('/dir1', zf.dir.pwd)
-      assert_equal(%w(dir11 file11 file12), zf.dir.entries('.').sort)
+      assert_equal(%w[dir11 file11 file12], zf.dir.entries('.').sort)
 
       zf.dir.chdir '../dir2/dir21'
       assert_equal('/dir2/dir21', zf.dir.pwd)
@@ -77,11 +78,11 @@ class ZipFsDirectoryTest < MiniTest::Test
 
       entries = []
       zf.dir.foreach('.') { |e| entries << e }
-      assert_equal(%w(dir1 dir2 file1).sort, entries.sort)
+      assert_equal(%w[dir1 dir2 file1].sort, entries.sort)
 
       entries = []
       zf.dir.foreach('dir1') { |e| entries << e }
-      assert_equal(%w(dir11 file11 file12), entries.sort)
+      assert_equal(%w[dir11 file11 file12], entries.sort)
     end
   end
 
@@ -93,11 +94,28 @@ class ZipFsDirectoryTest < MiniTest::Test
     end
   end
 
-  # Globbing not supported yet
-  # def test_glob
-  #  # test alias []-operator too
-  #  fail "implement test"
-  # end
+  def test_glob
+    globbed_files = [
+      'globTest/foo/bar/baz/foo.txt',
+      'globTest/foo.txt',
+      'globTest/food.txt'
+    ]
+
+    ::Zip::File.open(GLOB_TEST_ZIP) do |zf|
+      zf.dir.glob('**/*.txt') do |f|
+        assert globbed_files.include?(f.name)
+      end
+
+      zf.dir.glob('globTest/foo/**/*.txt') do |f|
+        assert_equal globbed_files[0], f.name
+      end
+
+      zf.dir.chdir('globTest/foo')
+      zf.dir.glob('**/*.txt') do |f|
+        assert_equal globbed_files[0], f.name
+      end
+    end
+  end
 
   def test_open_new
     ::Zip::File.open(TEST_ZIP) do |zf|
@@ -110,11 +128,11 @@ class ZipFsDirectoryTest < MiniTest::Test
       end
 
       d = zf.dir.new('.')
-      assert_equal(%w(file1 dir1 dir2).sort, d.entries.sort)
+      assert_equal(%w[file1 dir1 dir2].sort, d.entries.sort)
       d.close
 
       zf.dir.open('dir1') do |dir|
-        assert_equal(%w(dir11 file11 file12).sort, dir.entries.sort)
+        assert_equal(%w[dir11 file11 file12].sort, dir.entries.sort)
       end
     end
   end
