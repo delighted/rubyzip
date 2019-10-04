@@ -1,4 +1,5 @@
 # rubyzip
+
 [![Gem Version](https://badge.fury.io/rb/rubyzip.svg)](http://badge.fury.io/rb/rubyzip)
 [![Build Status](https://secure.travis-ci.org/rubyzip/rubyzip.svg)](http://travis-ci.org/rubyzip/rubyzip)
 [![Code Climate](https://codeclimate.com/github/rubyzip/rubyzip.svg)](https://codeclimate.com/github/rubyzip/rubyzip)
@@ -19,9 +20,10 @@ gem 'zip-zip' # will load compatibility for old rubyzip API.
 
 ## Requirements
 
-* Ruby 1.9.2 or greater
+- Ruby 2.4 or greater (for rubyzip 2.0; use 1.x for older rubies)
 
 ## Installation
+
 Rubyzip is available on RubyGems:
 
 ```
@@ -59,7 +61,8 @@ end
 ```
 
 ### Zipping a directory recursively
-Copy from [here](https://github.com/rubyzip/rubyzip/blob/05916bf89181e1955118fd3ea059f18acac28cc8/samples/example_recursive.rb )
+
+Copy from [here](https://github.com/rubyzip/rubyzip/blob/9d891f7353e66052283562d3e252fe380bb4b199/samples/example_recursive.rb)
 
 ```ruby
 require 'zip'
@@ -83,7 +86,7 @@ class ZipFileGenerator
 
   # Zip the input directory.
   def write
-    entries = Dir.entries(@input_dir) - %w(. ..)
+    entries = Dir.entries(@input_dir) - %w[. ..]
 
     ::Zip::File.open(@output_file, ::Zip::File::CREATE) do |zipfile|
       write_entries entries, '', zipfile
@@ -97,7 +100,6 @@ class ZipFileGenerator
     entries.each do |e|
       zipfile_path = path == '' ? e : File.join(path, e)
       disk_file_path = File.join(@input_dir, zipfile_path)
-      puts "Deflating #{disk_file_path}"
 
       if File.directory? disk_file_path
         recursively_deflate_directory(disk_file_path, zipfile, zipfile_path)
@@ -109,14 +111,12 @@ class ZipFileGenerator
 
   def recursively_deflate_directory(disk_file_path, zipfile, zipfile_path)
     zipfile.mkdir zipfile_path
-    subdir = Dir.entries(disk_file_path) - %w(. ..)
+    subdir = Dir.entries(disk_file_path) - %w[. ..]
     write_entries subdir, zipfile_path, zipfile
   end
 
   def put_into_archive(disk_file_path, zipfile, zipfile_path)
-    zipfile.get_output_stream(zipfile_path) do |f|
-      f.write(File.open(disk_file_path, 'rb').read)
-    end
+    zipfile.add(zipfile_path, disk_file_path)
   end
 end
 ```
@@ -152,12 +152,15 @@ When modifying a zip archive the file permissions of the archive are preserved.
 ### Reading a Zip file
 
 ```ruby
+MAX_SIZE = 1024**2 # 1MiB (but of course you can increase this)
 Zip::File.open('foo.zip') do |zip_file|
   # Handle entries one by one
   zip_file.each do |entry|
-    # Extract to file/directory/symlink
     puts "Extracting #{entry.name}"
-    entry.extract(dest_file)
+    raise 'File too large when extracted' if entry.size > MAX_SIZE
+
+    # Extract to file or directory based on name in the archive
+    entry.extract
 
     # Read into memory
     content = entry.get_input_stream.read
@@ -165,6 +168,7 @@ Zip::File.open('foo.zip') do |zip_file|
 
   # Find specific entry
   entry = zip_file.glob('*.csv').first
+  raise 'File too large when extracted' if entry.size > MAX_SIZE
   puts entry.get_input_stream.read
 end
 ```
@@ -176,7 +180,6 @@ end
 But there is one exception when it is not working - General Purpose Flag Bit 3.
 
 > If bit 3 (0x08) of the general-purpose flags field is set, then the CRC-32 and file sizes are not known when the header is written. The fields in the local header are filled with zero, and the CRC-32 and size are appended in a 12-byte structure (optionally preceded by a 4-byte signature) immediately after the compressed data
-
 
 If `::Zip::InputStream` finds such entry in the zip archive it will raise an exception.
 
@@ -220,7 +223,9 @@ File.open(new_path, "wb") {|f| f.write(buffer.string) }
 
 ## Configuration
 
-By default, rubyzip will not overwrite files if they already exist inside of the extracted path.  To change this behavior, you may specify a configuration option like so:
+### Existing Files
+
+By default, rubyzip will not overwrite files if they already exist inside of the extracted path. To change this behavior, you may specify a configuration option like so:
 
 ```ruby
 Zip.on_exists_proc = true
@@ -234,24 +239,13 @@ Additionally, if you want to configure rubyzip to overwrite existing files while
 Zip.continue_on_exists_proc = true
 ```
 
+### Non-ASCII Names
+
 If you want to store non-english names and want to open them on Windows(pre 7) you need to set this option:
 
 ```ruby
 Zip.unicode_names = true
 ```
-
-Some zip files might have an invalid date format, which will raise a warning. You can hide this warning with the following setting:
-
-```ruby
-Zip.warn_invalid_date = false
-```
-
-You can set the default compression level like so:
-
-```ruby
-Zip.default_compression = Zlib::DEFAULT_COMPRESSION
-```
-It defaults to `Zlib::DEFAULT_COMPRESSION`. Possible values are `Zlib::BEST_COMPRESSION`, `Zlib::DEFAULT_COMPRESSION` and `Zlib::NO_COMPRESSION`
 
 Sometimes file names inside zip contain non-ASCII characters. If you can assume which encoding was used for such names and want to be able to find such entries using `find_entry` then you can force assumed encoding like so:
 
@@ -260,6 +254,61 @@ Zip.force_entry_names_encoding = 'UTF-8'
 ```
 
 Allowed encoding names are the same as accepted by `String#force_encoding`
+
+### Date Validation
+
+Some zip files might have an invalid date format, which will raise a warning. You can hide this warning with the following setting:
+
+```ruby
+Zip.warn_invalid_date = false
+```
+
+### Size Validation
+
+By default (in rubyzip >= 2.0), rubyzip's `extract` method checks that an entry's reported uncompressed size is not (significantly) smaller than its actual size. This is to help you protect your application against [zip bombs](https://en.wikipedia.org/wiki/Zip_bomb). Before `extract`ing an entry, you should check that its size is in the range you expect. For example, if your application supports processing up to 100 files at once, each up to 10MiB, your zip extraction code might look like:
+
+```ruby
+MAX_FILE_SIZE = 10 * 1024**2 # 10MiB
+MAX_FILES = 100
+Zip::File.open('foo.zip') do |zip_file|
+  num_files = 0
+  zip_file.each do |entry|
+    num_files += 1 if entry.file?
+    raise 'Too many extracted files' if num_files > MAX_FILES
+    raise 'File too large when extracted' if entry.size > MAX_FILE_SIZE
+    entry.extract
+  end
+end
+```
+
+If you need to extract zip files that report incorrect uncompressed sizes and you really trust them not too be too large, you can disable this setting with
+```ruby
+Zip.validate_entry_sizes = false
+```
+
+Note that if you use the lower level `Zip::InputStream` interface, `rubyzip` does *not* check the entry `size`s. In this case, the caller is responsible for making sure it does not read more data than expected from the input stream.
+
+### Default Compression
+
+You can set the default compression level like so:
+
+```ruby
+Zip.default_compression = Zlib::DEFAULT_COMPRESSION
+```
+
+It defaults to `Zlib::DEFAULT_COMPRESSION`. Possible values are `Zlib::BEST_COMPRESSION`, `Zlib::DEFAULT_COMPRESSION` and `Zlib::NO_COMPRESSION`
+
+### Zip64 Support
+
+By default, Zip64 support is disabled for writing. To enable it do this:
+
+```ruby
+Zip.write_zip64_support = true
+```
+
+_NOTE_: If you will enable Zip64 writing then you will need zip extractor with Zip64 support to extract archive.
+
+### Block Form
 
 You can set multiple settings at the same time by using a block:
 
@@ -271,14 +320,6 @@ You can set multiple settings at the same time by using a block:
     c.default_compression = Zlib::BEST_COMPRESSION
   end
 ```
-
-By default, Zip64 support is disabled for writing. To enable it do this:
-
-```ruby
-Zip.write_zip64_support = true
-```
-
-_NOTE_: If you will enable Zip64 writing then you will need zip extractor with Zip64 support to extract archive.
 
 ## Developing
 

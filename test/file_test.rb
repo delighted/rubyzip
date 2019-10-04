@@ -103,6 +103,13 @@ class ZipFileTest < MiniTest::Test
     end
   end
 
+  def test_open_buffer_with_string
+    string = File.read('test/data/rubycode.zip')
+    ::Zip::File.open_buffer string do |zf|
+      assert zf.entries.map { |e| e.name }.include?('zippedruby1.rb')
+    end
+  end
+
   def test_open_buffer_with_stringio
     string_io = StringIO.new File.read('test/data/rubycode.zip')
     ::Zip::File.open_buffer string_io do |zf|
@@ -113,14 +120,52 @@ class ZipFileTest < MiniTest::Test
   def test_close_buffer_with_stringio
     string_io = StringIO.new File.read('test/data/rubycode.zip')
     zf = ::Zip::File.open_buffer string_io
-    assert(zf.close || true) # Poor man's refute_raises
+    assert_nil zf.close
   end
 
-  def test_close_buffer_with_io
-    f = File.open('test/data/rubycode.zip')
-    zf = ::Zip::File.open_buffer f
-    assert zf.close
-    f.close
+  def test_open_buffer_no_op_does_not_change_file
+    Dir.mktmpdir do |tmp|
+      test_zip = File.join(tmp, 'test.zip')
+      FileUtils.cp 'test/data/rubycode.zip', test_zip
+
+      # Note: this may change the file if it is opened with r+b instead of rb.
+      # The 'extra fields' in this particular zip file get reordered.
+      File.open(test_zip, 'rb') do |file|
+        Zip::File.open_buffer(file) do |zf|
+          nil # do nothing
+        end
+      end
+
+      assert_equal \
+        File.binread('test/data/rubycode.zip'),
+        File.binread(test_zip)
+    end
+  end
+
+  def test_open_buffer_close_does_not_change_file
+    Dir.mktmpdir do |tmp|
+      test_zip = File.join(tmp, 'test.zip')
+      FileUtils.cp 'test/data/rubycode.zip', test_zip
+
+      File.open(test_zip, 'rb') do |file|
+        zf = Zip::File.open_buffer(file)
+        refute zf.commit_required?
+        assert_nil zf.close
+      end
+
+      assert_equal \
+        File.binread('test/data/rubycode.zip'),
+        File.binread(test_zip)
+    end
+  end
+
+  def test_open_buffer_with_io_and_block
+    File.open('test/data/rubycode.zip') do |io|
+      io.set_encoding(Encoding::BINARY) # not strictly required but can be set
+      Zip::File.open_buffer(io) do |zip_io|
+        # left empty on purpose
+      end
+    end
   end
 
   def test_open_buffer_without_block
@@ -155,6 +200,26 @@ class ZipFileTest < MiniTest::Test
     assert_equal('', zfRead.comment)
     assert_equal(1, zfRead.entries.length)
     assert_equal(entryName, zfRead.entries.first.name)
+    AssertEntry.assert_contents(srcFile,
+                                zfRead.get_input_stream(entryName) { |zis| zis.read })
+  end
+
+  def test_add_stored
+    srcFile = 'test/data/file2.txt'
+    entryName = 'newEntryName.rb'
+    assert(::File.exist?(srcFile))
+    zf = ::Zip::File.new(EMPTY_FILENAME, ::Zip::File::CREATE)
+    zf.add_stored(entryName, srcFile)
+    zf.close
+
+    zfRead = ::Zip::File.new(EMPTY_FILENAME)
+    entry = zfRead.entries.first
+    assert_equal('', zfRead.comment)
+    assert_equal(1, zfRead.entries.length)
+    assert_equal(entryName, entry.name)
+    assert_equal(File.size(srcFile), entry.size)
+    assert_equal(entry.size, entry.compressed_size)
+    assert_equal(::Zip::Entry::STORED, entry.compression_method)
     AssertEntry.assert_contents(srcFile,
                                 zfRead.get_input_stream(entryName) { |zis| zis.read })
   end

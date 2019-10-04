@@ -1,7 +1,6 @@
 require 'delegate'
 require 'singleton'
 require 'tempfile'
-require 'tmpdir'
 require 'fileutils'
 require 'stringio'
 require 'zlib'
@@ -42,7 +41,8 @@ module Zip
                 :write_zip64_support,
                 :warn_invalid_date,
                 :case_insensitive_match,
-                :force_entry_names_encoding
+                :force_entry_names_encoding,
+                :validate_entry_sizes
 
   def reset!
     @_ran_once = false
@@ -54,6 +54,7 @@ module Zip
     @write_zip64_support = false
     @warn_invalid_date = true
     @case_insensitive_match = false
+    @validate_entry_sizes = true
   end
 
   def setup
