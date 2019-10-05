@@ -5,6 +5,8 @@ module Zip
     DEFLATED = 8
     # Language encoding flag (EFS) bit
     EFS = 0b100000000000
+    # CRC, compressed size, uncompressed size values stored in data descriptor
+    NONSEEKABLE_STREAM = 0b1000
 
     attr_accessor :comment, :compressed_size, :crc, :extra, :compression_method,
                   :name, :size, :local_header_offset, :zipfile, :fstype, :external_file_attributes,
@@ -137,6 +139,10 @@ module Zip
       @comment ? @comment.bytesize : 0
     end
 
+    def use_data_descriptor?
+      (@gp_flags & NONSEEKABLE_STREAM) != 0
+    end
+
     def calculate_local_header_size #:nodoc:all
       LOCAL_ENTRY_STATIC_HEADER_LENGTH + name_size + extra_size
     end
@@ -169,6 +175,12 @@ module Zip
 
       dest_path ||= @name
       block ||= proc { ::Zip.on_exists_proc }
+
+      # XXX Temporary mitigation for https://github.com/rubyzip/rubyzip/issues/369
+      raise "symlinks not supported" if symlink?
+      allowed_base_dir = Pathname.new(Dir.tmpdir).expand_path.to_s
+      is_safe_dest_path = Pathname.new(dest_path).expand_path.to_s.start_with?(allowed_base_dir)
+      raise "unsafe dest_path: #{dest_path.inspect}" unless is_safe_dest_path
 
       if directory? || file? || symlink?
         __send__("create_#{@ftype}", dest_path, &block)
@@ -274,15 +286,24 @@ module Zip
 
     def pack_local_entry
       zip64 = @extra['Zip64']
+      crc, compressed_size, original_size = if use_data_descriptor?
+        [0, 0, 0]
+      else
+        [
+          @crc,
+          (zip64 && zip64.compressed_size) ? 0xFFFFFFFF : @compressed_size,
+          (zip64 && zip64.original_size) ? 0xFFFFFFFF : @size
+        ]
+      end
       [::Zip::LOCAL_ENTRY_SIGNATURE,
        @version_needed_to_extract, # version needed to extract
        @gp_flags, # @gp_flags
        @compression_method,
        @time.to_binary_dos_time, # @last_mod_time
        @time.to_binary_dos_date, # @last_mod_date
-       @crc,
-       zip64 && zip64.compressed_size ? 0xFFFFFFFF : @compressed_size,
-       zip64 && zip64.original_size ? 0xFFFFFFFF : @size,
+       crc,
+       compressed_size,
+       original_size,
        name_size,
        @extra ? @extra.local_size : 0].pack('VvvvvvVVVvv')
     end
