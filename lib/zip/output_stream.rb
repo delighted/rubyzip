@@ -129,10 +129,10 @@ module Zip
       @current_entry.compressed_size = @output_stream.tell - @current_entry.local_header_offset - @current_entry.calculate_local_header_size
       @current_entry.size = @compressor.size
       @current_entry.crc = @compressor.crc
+      @current_entry.gp_flags |= @encrypter.gp_flags
       if @current_entry.use_data_descriptor?
         @output_stream << @encrypter.data_descriptor(@current_entry.crc, @current_entry.compressed_size, @current_entry.size)
       end
-      @current_entry.gp_flags |= @encrypter.gp_flags
       @current_entry = nil
       @compressor = ::Zip::NullCompressor.instance
     end
